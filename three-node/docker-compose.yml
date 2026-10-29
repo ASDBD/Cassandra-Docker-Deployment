@@ -1,0 +1,71 @@
+name: cassandra-cluster
+
+# Nodes join one at a time (depends_on + healthcheck): Cassandra does not
+# support several nodes bootstrapping simultaneously.
+x-cassandra: &cassandra
+  image: cassandra:4.1
+  environment: &cassandra-env
+    CASSANDRA_CLUSTER_NAME: LabCluster
+    CASSANDRA_DC: datacenter1
+    CASSANDRA_RACK: rack1
+    CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+    CASSANDRA_SEEDS: cassandra1
+    MAX_HEAP_SIZE: 512M
+    HEAP_NEWSIZE: 128M
+  healthcheck: &cassandra-health
+    test: ["CMD-SHELL", "nodetool status 2>/dev/null | grep -E \"^UN\\s+$(hostname -i)\" || exit 1"]
+    interval: 20s
+    timeout: 15s
+    retries: 30
+    start_period: 40s
+
+services:
+  cassandra1:
+    <<: *cassandra
+    container_name: cassandra1
+    hostname: cassandra1
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra1_data:/var/lib/cassandra
+
+  cassandra2:
+    <<: *cassandra
+    container_name: cassandra2
+    hostname: cassandra2
+    volumes:
+      - cassandra2_data:/var/lib/cassandra
+    depends_on:
+      cassandra1:
+        condition: service_healthy
+
+  cassandra3:
+    <<: *cassandra
+    container_name: cassandra3
+    hostname: cassandra3
+    volumes:
+      - cassandra3_data:/var/lib/cassandra
+    depends_on:
+      cassandra2:
+        condition: service_healthy
+
+  jupyter:
+    build: ../jupyter
+    container_name: jupyter-cluster
+    ports:
+      - "8888:8888"
+    environment:
+      CASSANDRA_HOSTS: cassandra1,cassandra2,cassandra3
+      CASSANDRA_PORT: "9042"
+      REPLICATION_FACTOR: "3"
+      JUPYTER_TOKEN: cassandra
+    volumes:
+      - ../notebooks:/home/jovyan/work
+    depends_on:
+      cassandra3:
+        condition: service_healthy
+
+volumes:
+  cassandra1_data:
+  cassandra2_data:
+  cassandra3_data:

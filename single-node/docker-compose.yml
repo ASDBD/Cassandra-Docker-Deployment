@@ -1,0 +1,43 @@
+name: cassandra-single
+
+services:
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra-single
+    hostname: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: LabSingle
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 40s
+
+  jupyter:
+    build: ../jupyter
+    container_name: jupyter-single
+    ports:
+      - "8888:8888"
+    environment:
+      CASSANDRA_HOSTS: cassandra
+      CASSANDRA_PORT: "9042"
+      REPLICATION_FACTOR: "1"
+      JUPYTER_TOKEN: cassandra
+    volumes:
+      - ../notebooks:/home/jovyan/work
+    depends_on:
+      cassandra:
+        condition: service_healthy
+
+volumes:
+  cassandra_data:
